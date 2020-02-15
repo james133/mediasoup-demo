@@ -6,14 +6,8 @@ process.env.DEBUG = process.env.DEBUG || '*INFO* *WARN* *ERROR*';
 const config = require('./config');
 
 /* eslint-disable no-console */
-console.log('- config.mediasoup.numWorkers:', config.mediasoup.numWorkers);
-console.log('- process.env.DEBUG:', process.env.DEBUG);
-console.log(
-	'- config.mediasoup.workerSettings.logLevel:',
-	config.mediasoup.workerSettings.logLevel);
-console.log(
-	'- config.mediasoup.workerSettings.logTags:',
-	config.mediasoup.workerSettings.logTags);
+console.log('process.env.DEBUG:', process.env.DEBUG);
+console.log('config.js:\n%s', JSON.stringify(config, null, '  '));
 /* eslint-enable no-console */
 
 const fs = require('fs');
@@ -23,7 +17,7 @@ const protoo = require('protoo-server');
 const mediasoup = require('mediasoup');
 const express = require('express');
 const bodyParser = require('body-parser');
-const AwaitQueue = require('awaitqueue');
+const { AwaitQueue } = require('awaitqueue');
 const Logger = require('./lib/Logger');
 const Room = require('./lib/Room');
 const interactiveServer = require('./lib/interactiveServer');
@@ -82,7 +76,7 @@ async function run()
 	// Run a protoo WebSocketServer.
 	await runProtooWebSocketServer();
 
-	// Log rooms status every 30 seconds.
+	// Log rooms status every X seconds.
 	setInterval(() =>
 	{
 		for (const room of rooms.values())
@@ -107,8 +101,8 @@ async function runMediasoupWorkers()
 			{
 				logLevel   : config.mediasoup.workerSettings.logLevel,
 				logTags    : config.mediasoup.workerSettings.logTags,
-				rtcMinPort : config.mediasoup.workerSettings.rtcMinPort,
-				rtcMaxPort : config.mediasoup.workerSettings.rtcMaxPort
+				rtcMinPort : Number(config.mediasoup.workerSettings.rtcMinPort),
+				rtcMaxPort : Number(config.mediasoup.workerSettings.rtcMaxPort)
 			});
 
 		worker.on('died', () =>
@@ -120,6 +114,14 @@ async function runMediasoupWorkers()
 		});
 
 		mediasoupWorkers.push(worker);
+
+		// Log worker resource usage every X seconds.
+		setInterval(async () =>
+		{
+			const usage = await worker.getResourceUsage();
+
+			logger.info('mediasoup Worker resource usage [pid:%d]: %o', worker.pid, usage);
+		}, 120000);
 	}
 }
 
@@ -374,7 +376,8 @@ async function runHttpsServer()
 
 	await new Promise((resolve) =>
 	{
-		httpsServer.listen(config.https.listenPort, config.https.listenIp, resolve);
+		httpsServer.listen(
+			Number(config.https.listenPort), config.https.listenIp, resolve);
 	});
 }
 

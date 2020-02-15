@@ -70,6 +70,7 @@ export default class PeerView extends React.Component
 			consumerCurrentTemporalLayer,
 			consumerPreferredSpatialLayer,
 			consumerPreferredTemporalLayer,
+			consumerPriority,
 			audioMuted,
 			videoVisible,
 			videoMultiLayer,
@@ -80,6 +81,7 @@ export default class PeerView extends React.Component
 			onChangeDisplayName,
 			onChangeMaxSendingSpatialLayer,
 			onChangeVideoPreferredLayers,
+			onChangeVideoPriority,
 			onRequestKeyFrame,
 			onStatsClick
 		} = this.props;
@@ -332,6 +334,40 @@ export default class PeerView extends React.Component
 								</p>
 							</If>
 
+							<If condition={!isMe && videoCodec && consumerPriority > 0}>
+								<p>
+									{`priority: ${consumerPriority}`}
+									<span>{' '}</span>
+									<span
+										className={classnames({
+											clickable : consumerPriority > 1
+										})}
+										onClick={(event) =>
+										{
+											event.stopPropagation();
+
+											onChangeVideoPriority(consumerPriority - 1);
+										}}
+									>
+										{'[ down ]'}
+									</span>
+									<span>{' '}</span>
+									<span
+										className={classnames({
+											clickable : consumerPriority < 255
+										})}
+										onClick={(event) =>
+										{
+											event.stopPropagation();
+
+											onChangeVideoPriority(consumerPriority + 1);
+										}}
+									>
+										{'[ up ]'}
+									</span>
+								</p>
+							</If>
+
 							<If condition={!isMe && videoCodec}>
 								<p>
 									<span
@@ -466,14 +502,14 @@ export default class PeerView extends React.Component
 		}
 	}
 
-	componentWillReceiveProps(nextProps)
+	componentWillUpdate()
 	{
 		const {
 			isMe,
 			audioTrack,
 			videoTrack,
 			videoRtpParameters
-		} = nextProps;
+		} = this.props;
 
 		const { maxSpatialLayer } = this.state;
 
@@ -623,7 +659,7 @@ export default class PeerView extends React.Component
 	{
 		const { videoElem, canvas } = this.refs;
 
-		const step = () =>
+		const step = async () =>
 		{
 			// NOTE: Somehow this is critical. Otherwise the Promise returned by
 			// faceapi.detectSingleFace() never resolves or rejects.
@@ -634,32 +670,32 @@ export default class PeerView extends React.Component
 				return;
 			}
 
-			faceapi.detectSingleFace(videoElem, tinyFaceDetectorOptions)
-				.then((detection) =>
-				{
-					if (detection)
-					{
-						const width = videoElem.offsetWidth;
-						const height = videoElem.offsetHeight;
+			const detection =
+				await faceapi.detectSingleFace(videoElem, tinyFaceDetectorOptions);
 
-						canvas.width = width;
-						canvas.height = height;
+			if (detection)
+			{
+				const width = videoElem.offsetWidth;
+				const height = videoElem.offsetHeight;
 
-						const resizedDetection = detection.forSize(width, height);
+				canvas.width = width;
+				canvas.height = height;
 
-						faceapi.drawDetection(
-							canvas, [ resizedDetection ], { withScore: false });
-					}
-					else
-					{
-						// Trick to hide the canvas rectangle.
-						canvas.width = 0;
-						canvas.height = 0;
-					}
+				// const resizedDetection = detection.forSize(width, height);
+				const resizedDetections =
+					faceapi.resizeResults(detection, { width, height });
 
-					this._faceDetectionRequestAnimationFrame =
-						requestAnimationFrame(() => setTimeout(step, 100));
-				});
+				faceapi.draw.drawDetections(canvas, resizedDetections);
+			}
+			else
+			{
+				// Trick to hide the canvas rectangle.
+				canvas.width = 0;
+				canvas.height = 0;
+			}
+
+			this._faceDetectionRequestAnimationFrame =
+				requestAnimationFrame(() => setTimeout(step, 100));
 		};
 
 		step();
@@ -737,6 +773,7 @@ PeerView.propTypes =
 	consumerCurrentTemporalLayer   : PropTypes.number,
 	consumerPreferredSpatialLayer  : PropTypes.number,
 	consumerPreferredTemporalLayer : PropTypes.number,
+	consumerPriority               : PropTypes.number,
 	audioTrack                     : PropTypes.any,
 	videoTrack                     : PropTypes.any,
 	audioMuted                     : PropTypes.bool,
@@ -750,6 +787,7 @@ PeerView.propTypes =
 	onChangeDisplayName            : PropTypes.func,
 	onChangeMaxSendingSpatialLayer : PropTypes.func,
 	onChangeVideoPreferredLayers   : PropTypes.func,
+	onChangeVideoPriority          : PropTypes.func,
 	onRequestKeyFrame              : PropTypes.func,
 	onStatsClick                   : PropTypes.func.isRequired
 };
